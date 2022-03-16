@@ -1,31 +1,39 @@
 import numpy as np
 import pandas as pd
-import random
 import os
-from os import listdir
-from os.path import isfile, join, isdir
-import cv2
 import pickle
-import sys
 import time
 from contextlib import contextmanager
 from importlib import reload
-# from datetime import datetime
-from shutil import copyfile, move
 import re
-from pathlib import Path
-
-from project_tools import project_config, project_utils
-
-from shutil import copyfile, move
-import gc
+from project_tools import project_config, project_utils, numerapi_utils
 import glob
-from multiprocessing import Pool
-from functools import partial
 import matplotlib.pyplot as plt
-import traceback
-import json
+import seaborn as sns
+from random import randint, random
+import itertools
+import scipy
+from scipy.stats import ks_2samp
+from sklearn.metrics import log_loss, roc_auc_score, accuracy_score, mean_squared_error
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.pipeline import make_pipeline
+from sklearn import linear_model
 import datetime
+import json
+from collections import OrderedDict
+from os import listdir
+from os.path import isfile, join, isdir
+import glob
+import numerapi
+import itertools
+import io
+import requests
+from pathlib import Path
+from scipy.stats.mstats import gmean
+from typing import List, Dict
+
+
+napi = numerapi.NumerAPI() #verbosity="info")
 
 
 def get_time_string():
@@ -46,8 +54,7 @@ def reload_project():
     """
     reload(project_config)
     reload(project_utils)
-    reload(project_class)
-
+    reload(numerapi_utils)
 
 @contextmanager
 def timer(name):
@@ -232,6 +239,16 @@ def empty_folder(path):
     files = glob.glob(path)
     for f in files:
         os.remove(f)
+
+
+def rescale(n, range1, range2):
+    if n>range1[1]: #or n<range1[0]:
+        n=range1[1]
+    if n<range1[0]:
+        n=range1[0]
+    delta1 = range1[1] - range1[0]
+    delta2 = range2[1] - range2[0]
+    return (delta2 * (n - range1[0]) / delta1) + range2[0]
 
 
 
@@ -637,6 +654,151 @@ def try_divide(x, y, val=0.0):
     if y != 0.0:
         val = float(x) / y
     return val
+
+
+def series_reverse_cumsum(a):
+    return a.fillna(0).values[::-1].cumsum()[::-1]
+
+
+
+#### NumerDash specific functions ###
+
+def calculate_rounddailysharpe_dashboard(df, lastround, earliest_round, score='corr'):
+    if score=='corr':
+        target = 'corr_sharpe'
+    elif score == 'corr_pct':
+        target = 'corr_pct_sharpe'
+    elif score=='mmc':
+        target = 'mmc_sharpe'
+    elif score=='mmc_pct':
+        target = 'mmc_pct_sharpe'
+    elif score=='corrmmc':
+        target = 'corrmmc_sharpe'
+    elif score=='corr2mmc':
+        target = 'corr2mmc_sharpe'
+    elif score=='cmavg_pct':
+        target = 'cmavgpct_sharpe'
+    elif score=='c2mavg_pct':
+        target = 'c2mavcpct_sharpe'
+
+    mean_feat = 'avg_sharpe'
+    sos_feat = 'sos'
+    df = df[(df['roundNumber'] >= earliest_round) & (df['roundNumber'] <= lastround)]
+    res = df.groupby(['model', 'roundNumber', 'group'])[score].apply(
+        lambda x: get_array_sharpe(x)).reset_index(drop=False)
+    res = res.rename(columns={score: target}).sort_values('roundNumber', ascending=False)
+    res = res.pivot(index=['model', 'group'], columns='roundNumber', values=target)
+    res.columns.name = ''
+    cols = [i for i in res.columns[::-1]]
+    res = res[cols]
+    res[mean_feat] = res[cols].mean(axis=1)
+    res[sos_feat] = res[cols].apply(lambda x: get_array_sharpe(x), axis=1)
+    res = res.drop_duplicates(keep='first').sort_values(by=sos_feat, ascending=False)
+    res.reset_index(drop=False, inplace=True)
+    return res[['model', 'group', sos_feat, mean_feat]+cols]
+
+
+
+def groupby_agg_execution(agg_recipies, df, verbose=True):
+    result_dfs = dict()
+    for groupby_cols, features, aggs in agg_recipies:
+        group_object = df.groupby(groupby_cols)
+        groupby_key = '_'.join(groupby_cols)
+        if groupby_key not in list(result_dfs.keys()):
+            result_dfs[groupby_key] = pd.DataFrame()
+        for feature in features:
+            rename_col = feature
+            for agg in aggs:
+                if isinstance(agg, dict):
+                    agg_name = list(agg.keys())[0]
+                    agg_func = agg[agg_name]
+                else:
+                    agg_name = agg
+                    agg_func = agg
+                if agg_name=='count':
+                    groupby_aggregate_name = '{}_{}'.format(groupby_key, agg_name)
+                else:
+                    groupby_aggregate_name = '{}_{}_{}'.format(groupby_key, feature, agg_name)
+                verbose and print(f'generating statistic {groupby_aggregate_name}')
+                groupby_res_df = group_object[feature].agg(agg_func).reset_index(drop=False)
+                groupby_res_df = groupby_res_df.rename(columns={rename_col: groupby_aggregate_name})
+                if len(result_dfs[groupby_key]) == 0:
+                    result_dfs[groupby_key] = groupby_res_df
+                else:
+                    result_dfs[groupby_key][groupby_aggregate_name] = groupby_res_df[groupby_aggregate_name]
+    return result_dfs
+
+
+def get_latest_round_id():
+    try:
+        all_competitions = numerapi_utils.get_competitions()
+        latest_comp_id = all_competitions[0]['number']
+    except:
+        print('calling api unsuccessulf, using downloaded data to get the latest round')
+        local_data = load_data(project_config.DASHBOARD_MODEL_RESULT_FILE)
+        latest_comp_id = local_data['roundNumber'].max()
+    return int(latest_comp_id)
+#     except:
+
+latest_round = get_latest_round_id()
+
+
+
+
+def update_numerati_data(url=project_config.NUMERATI_URL, save_path=project_config.FEATURE_PATH):
+    content = requests.get(url).content
+    data = pd.read_csv(io.StringIO(content.decode('utf-8')))
+    save_file = os.path.join(save_path, 'numerati_data.pkl')
+    pickle_data(save_file, data)
+    return data
+
+
+
+
+def get_model_group(model_name):
+    cat_name = 'other'
+    if model_name in project_config.MODEL_NAMES+project_config.NEW_MODEL_NAMES:
+        cat_name = 'yx'
+    elif model_name in project_config.TOP_LB:
+        cat_name = 'top_corr'
+    elif model_name in project_config.IAAI_MODELS:
+        cat_name = 'iaai'
+    elif model_name in project_config.ARBITRAGE_MODELS:
+        cat_name = 'arbitrage'
+    elif model_name in project_config.MCV_MODELS:
+        cat_name = 'mcv'
+    # elif model_name in project_config.MM_MODELS:
+    #     cat_name = 'mm'
+    elif model_name in project_config.BENCHMARK_MODELS:
+        cat_name = 'benchmark'
+    elif model_name in project_config.TP3M:
+        cat_name = 'top_3m'
+    elif model_name in project_config.TP1Y:
+        cat_name = 'top_1y'
+    return cat_name
+
+
+def get_dashboard_data_status():
+    dashboard_data_tstr = 'NA'
+    nmtd_tstr = 'NA'
+    try:
+        dashboard_data_t = datetime.datetime.utcfromtimestamp(os.path.getctime(project_config.DASHBOARD_MODEL_RESULT_FILE))
+        dashboard_data_tstr = dashboard_data_t.strftime(project_config.DATETIME_FORMAT2)
+    except Exception as e:
+        print(e)
+        pass
+    try:
+        nmtd_t = datetime.datetime.utcfromtimestamp(os.path.getctime(project_config.NUMERATI_FILE))
+        nmtd_tstr = nmtd_t.strftime(project_config.DATETIME_FORMAT2)
+    except Exception as e:
+        print(e)
+        pass
+    return dashboard_data_tstr, nmtd_tstr
+
+
+
+
+
 
 
 
