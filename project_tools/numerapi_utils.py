@@ -175,6 +175,47 @@ def daily_submissions_performances(username: str) -> List[Dict]:
     return performances
 
 
+def daily_submissions_performances_V3(modelname: str) -> List[Dict]:
+    query = """
+              query($modelName: String!) {
+                v3UserProfile(modelName: $modelName) {
+                    roundModelPerformances{
+                        roundNumber
+                        roundResolveTime
+                        corr
+                        corrPercentile
+                        mmc
+                        mmcMultiplier
+                        mmcPercentile
+                        tc
+                        tcPercentile
+                        corrWMetamodel
+                        payout
+                        roundResolved
+                        roundResolveTime
+                        corrMultiplier
+                        mmcMultiplier
+                        selectedStakeValue
+                    }
+                    stakeValue
+                    nmrStaked
+                }
+              }
+            """
+    arguments = {'modelName': modelname}
+    data = napi.raw_query(query, arguments)['data']['v3UserProfile']
+    performances = data['roundModelPerformances']
+    # convert strings to python objects
+    for perf in performances:
+        utils.replace(perf, "date", utils.parse_datetime_string)
+    # remove useless items
+    performances = [p for p in performances
+                    if any([p['corr'], p['tc'], p['mmc']])]
+    return performances
+
+
+
+
 
 
 

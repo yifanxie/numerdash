@@ -660,6 +660,9 @@ def series_reverse_cumsum(a):
     return a.fillna(0).values[::-1].cumsum()[::-1]
 
 
+def get_array_sharpe(values):
+    return values.mean()/values.std()
+
 
 #### NumerDash specific functions ###
 

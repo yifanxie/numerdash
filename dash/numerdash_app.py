@@ -19,6 +19,12 @@ import traceback
 import datetime
 
 st.set_page_config(layout='wide')
+get_benchmark_data = True
+
+# get_dailyscore = True
+
+
+
 
 def sidebar_data_picker():
     st.sidebar.subheader('Model Data Picker')
@@ -28,7 +34,9 @@ def sidebar_data_picker():
     special_list = st.sidebar.checkbox('model from specific users', value=True)
     return top_lb, top_tp3m, top_tp1y, special_list
 
-def model_data_picker(values = None):
+
+# to be removed
+def model_data_picker_bak(values = None):
     if values is None:
         values = [True, True, True, True, True, True]
     model_dict = {}
@@ -58,7 +66,9 @@ def model_data_picker(values = None):
         model_dict['mcv'] = project_config.MCV_MODELS + project_config.MCV_NEW_MODELS
     return model_dict
 
-def model_fast_picker(models):
+
+# to be removed
+def model_fast_picker_bak(models):
     text_content = '''
                     fast model picker by CSV string.
                     example: "model1, model2, model3" 
@@ -72,6 +82,39 @@ def model_fast_picker(models):
             if m in models:
                 result_models.append(m)
     return list(dict.fromkeys(result_models))
+
+
+
+def default_model_picker():
+    picked_models = {}
+    if os.path.isfile('default_models.json'):
+        default_models_dict = project_utils.load_json('default_models.json')
+        for key in default_models_dict.keys():
+            picked_models[key] = default_models_dict[key]
+    if os.path.isfile('user_models.json'):
+        user_models_dict = project_utils.load_json('user_models.json')
+        for key in user_models_dict.keys():
+            picked_models[key] = user_models_dict[key]
+    return picked_models
+
+
+def model_fast_picker(models):
+    text_content = '''
+                    fast model picker by CSV string.
+                    example: "model1, model2, model3" 
+                   '''
+    text = st.sidebar.text_area(text_content)
+    result_models = []
+    if len(text)>0:
+        csv_parts = text.split(',')
+        for s in csv_parts:
+            m = s.strip()
+            if m not in models:
+                result_models.append(m)
+    return list(dict.fromkeys(result_models))
+
+
+
 
 
 
@@ -202,156 +245,136 @@ def round_view(data, select_perview, select_metric=None):
                  generate_live_round_stake(data, row_cts, c, r)
 
 
-def performance_overview():
+def score_overview():
     models = []
+    data = []
+    benchmark_opt = st.sidebar.checkbox('download default models', value=True)
+
+    model_selection = st.empty()
+    if benchmark_opt:
+        model_dict = default_model_picker()
+        for k in model_dict.keys():
+            models += model_dict[k]
+    models = models + model_fast_picker(models)
+    # if len(models)>0:
+        # model_selection = st.sidebar.multiselect('select models', models, default=models)
     st.sidebar.subheader('Choose a Table View')
     select_perview = st.sidebar.selectbox("", list(tbl_opt.keys()), index=0, format_func=lambda x: tbl_opt[x])
-    model_dict = model_data_picker(values=[False, False, False, False, True, True])
-    data = []
-    for k in model_dict.keys():
-        models += model_dict[k]
-    if os.path.isfile(project_config.DASHBOARD_MODEL_RESULT_FILE) and len(models)>0:
-        data = project_utils.load_data(project_config.DASHBOARD_MODEL_RESULT_FILE)
-        if select_perview=='round_result':
-            data = data.drop(['fnc', 'fnc_pct'], axis=1)
-            data = data.drop_duplicates(['model', 'roundNumber'], keep='first')
-            data = data[data['model'].isin(models)].reset_index(drop=True)
-            round_view(data, select_perview)
-        if select_perview=='dailyscore_metric':
-            st.sidebar.subheader('Select Round Data')
-            latest_round = int(data['roundNumber'].max())
-            earliest_round = int(data['roundNumber'].min())
-            if (latest_round - earliest_round) > 10:
-                # suggest_round = int(latest_round - (latest_round - earliest_round) / 2)
-                suggest_round = 263
-            else:
-                suggest_round = earliest_round
-            select_rounds = st.sidebar.slider('select a round', earliest_round, latest_round, (suggest_round, latest_round - 1), 1)
-            data = data[(data['model'].isin(models))]
-            data = data[(data['roundNumber']>=select_rounds[0]) & (data['roundNumber']<=select_rounds[1])]
-            # st.write(data.shape, latest_round, earliest_round, suggest_round, select_rounds)
-            st.write(f'Key columns: sos - Sharpe raito of daily score sharpe, avg_sharpe - Average of daily score sharpe')
-            round_view(data, select_perview)
-            # round_view(models, )
-        if select_perview=='round_metric':
-            st.sidebar.subheader('Select Round Data')
-            latest_round = int(data['roundNumber'].max())
-            earliest_round = int(data['roundNumber'].min())
-            if (latest_round - earliest_round) > 10:
-                # suggest_round = int(latest_round - (latest_round - earliest_round) / 2)
-                suggest_round = 263
-            else:
-                suggest_round = earliest_round
-            select_rounds = st.sidebar.slider('select a round', earliest_round, latest_round, (suggest_round, latest_round - 1), 1)
-            
-            data = data.drop(['fnc', 'fnc_pct'], axis=1)
-            data = data.drop_duplicates(['model', 'roundNumber'], keep='first')
-            data = data[(data['roundNumber']>=select_rounds[0]) & (data['roundNumber']<=select_rounds[1])]
-            data = data[data['model'].isin(models)].reset_index(drop=True)
-
-            roundmetrics_data = get_roundmetric_data(data)
-            min_count = int(roundmetrics_data['count'].min())
-            max_count = int(roundmetrics_data['count'].max())
-            if min_count<max_count:
-                select_minround = st.sidebar.slider('miminum number of rounds', min_count, max_count, min_count, 1)
-            else:
-                select_minround = min_count
-            roundmetrics_data = roundmetrics_data[roundmetrics_data['count']>=select_minround].reset_index(drop=True)
-            # st.write(roundmetrics_data.shape)
-            round_view(roundmetrics_data, select_perview)
-            # st.write(roundmetrics_data)
-    else:
-        st.info('model result data file missing, or no model is selected')
-
-
+    if len(models)>0:
+        model_selection.multiselect('selected models', models, default=models)
 
 
 def data_operation():
     # top_lb, top_tp3m, top_tp1y, special_list = sidebar_data_picker()
     latest_round = project_utils.latest_round
     models = []
-    model_dict = model_data_picker()
-    for k in model_dict.keys():
-        models += model_dict[k]
+    benchmark_opt = st.sidebar.checkbox('download default models', value=True)
+    if benchmark_opt:
+        model_dict = default_model_picker()
+        for k in model_dict.keys():
+            models += model_dict[k]
+    models = models + model_fast_picker(models)
+    if len(models)>0:
+        model_selection = st.multiselect('select models', models, default=models)
     suggest_min_round = 182 #latest_round-50
     min_round, max_round = st.slider('select tournament rounds', 200, latest_round, (suggest_min_round, latest_round), 1)
     roundlist = [i for i in range(max_round, min_round-1, -1)]
-    download = st.button('download data of tracked models')
+    download = st.button('download data of selected models')
     st.sidebar.subheader('configuration')
     show_info=st.sidebar.checkbox('show background data', value=False)
-    update_numeraiti_data = st.sidebar.checkbox('update numerati data', value=True)
-    update_model_data = st.sidebar.checkbox('update model data', value=True)
+    # update_numeraiti_data = st.sidebar.checkbox('update numerati data', value=True)
+    # update_model_data = st.sidebar.checkbox('update model data', value=True)
+    # update_model_data =
 
-
-    model_df = []
-    if download and len(models)>0:
-        if update_numeraiti_data:
-            if show_info:
-                st.info('updating numerati data')
-            project_utils.update_numerati_data()
-
-        if update_model_data:
-            model_dfs = []
-            my_bar = st.progress(0.0)
-            my_bar.progress(0.0)
-            percent_complete = 0.0
-            # models = models[0:5]
-            for i in range(len(models)):
-                message = ''
-                try:
-                    model_res = numerapi_utils.daily_submissions_performances(models[i])
-                    if len(model_res) > 0:
-                        cols = ['model'] + list(model_res[0].keys())
-                        model_df = pd.DataFrame(model_res)
-                        model_df['model'] = models[i]
-                        model_df = model_df[cols]
-                        model_dfs.append(model_df)
-                    else:
-                        message = f'no result found for model {models[i]}'
-                except Exception:
-                    # if show_info:
-                    #     st.write(f'error while getting result for {models[i]}')
-                    except_msg = traceback.format_exc()
-                    message = f'error while getting result for {models[i]}: {except_msg}'
-                if show_info and len(message)>0:
-                    st.info(message)
-                percent_complete += 1/len(models)
-                if i == len(models)-1:
-                    percent_complete = 1.0
-                time.sleep(0.1)
-                my_bar.progress(percent_complete)
-            model_df = pd.concat(model_dfs, axis=0).sort_values(by=['roundNumber','date'], ascending=False).reset_index(drop=True)
-            model_df = model_df[model_df['roundNumber'].isin(roundlist)].reset_index(drop=True)
-            model_df['date'] = model_df['date'].dt.date
-            model_df['group'] = model_df['model'].apply(lambda x: project_utils.get_model_group(x))
+    model_df = get_saved_data()
+    if download and len(model_selection)>0:
+        # if update_model_data:
+        with st.spinner('downloading model round results'):
+            model_df = []
+            model_df = download_model_round_result(model_selection, roundlist, show_info)
 
     prjreload = st.sidebar.button('reload config')
     if prjreload:
         project_utils.reload_project()
     if len(model_df)>0:
-        rename_dict = {'corrPercentile': 'corr_pct', 'correlation':'corr', 'correlationWithMetamodel':'corr_meta', 'mmcPercentile':'mmc_pct', 'fncPercentile':'fnc_pct'}
+        rename_dict = {'corrPercentile': 'corr_pct', 'correlation':'corr', 'corrWMetamodel':'corr_meta', 'mmcPercentile':'mmc_pct', 'tcPercentile':'tc_pct'}
         model_df.rename(columns=rename_dict, inplace=True)
         model_df['corrmmc'] = model_df['corr'] + model_df['mmc']
         model_df['corr2mmc'] = model_df['corr'] + 2*model_df['mmc']
         model_df['cmavg_pct'] = (model_df['corr_pct'] + model_df['mmc_pct'])/2
         model_df['c2mavg_pct'] = (model_df['corr_pct'] + 2*model_df['mmc_pct'])/3
-        ord_cols = ['model','corr', 'corr_pct', 'mmc', 'mmc_pct', 'corrmmc', 'cmavg_pct', 'corr_meta','group', 'corr2mmc','c2mavg_pct', 'date', 'roundNumber', 'fnc', 'fnc_pct']
+        ord_cols = ['model','corr', 'corr_pct', 'mmc', 'mmc_pct', 'corrmmc', 'cmavg_pct', 'corr_meta', 'tc', 'tc_pct', 'corr2mmc','c2mavg_pct', 'roundNumber']
         model_df = model_df[ord_cols]
-        project_utils.pickle_data(project_config.DASHBOARD_MODEL_RESULT_FILE, model_df)
+        if project_config.SAVE_LOCAL_COPY:
+            project_utils.pickle_data(project_config.MODEL_ROUND_RESULT_FILE, model_df)
+        st.session_state['model_data'] = model_df
+
     if show_info:
         st.text('list of models being tracked')
         st.write(model_dict)
-        # st.write(models)
         try:
+            st.write(st.session_state['model_data'].shape)
             st.write(model_df.head(5))
         except:
             st.write('model data was not retrieved')
-    st.sidebar.subheader('data info')
-    dbd_tstr, nmtd_str = project_utils.get_dashboard_data_status()
-    st.sidebar.text(f'dashboard timestamp: {dbd_tstr}')
-    st.sidebar.text(f'numerati timestamp: {nmtd_str}')
+
+    if len(model_df)>0:
+        get_performance_data_status(model_df)
     return None
 
+def get_saved_data():
+    res = []
+    if os.path.isfile(project_config.MODEL_ROUND_RESULT_FILE):
+        res = project_utils.load_data(project_config.MODEL_ROUND_RESULT_FILE)
+        st.session_state['model_data'] = res
+    return res
+
+def get_performance_data_status(df):
+    st.sidebar.subheader('model data summary')
+    # latest_date = df['date'][0].strftime(project_config.DATETIME_FORMAT3)
+    model_num = df['model'].nunique()
+    round_num = df['roundNumber'].nunique()
+    latest_round = df['roundNumber'].max()
+    # st.sidebar.text(f'latest date: {latest_date}')
+    st.sidebar.text(f'number of models: {model_num}')
+    st.sidebar.text(f'number of rounds: {round_num}')
+    st.sidebar.text(f'latest round: {latest_round}')
+    return None
+
+
+def download_model_round_result(models, roundlist, show_info):
+    model_df = []
+    model_dfs = []
+    my_bar = st.progress(0.0)
+    my_bar.progress(0.0)
+    percent_complete = 0.0
+    for i in range(len(models)):
+        message = ''
+        try:
+            model_res = numerapi_utils.daily_submissions_performances_V3(models[i])
+            if len(model_res) > 0:
+                cols = ['model'] + list(model_res[0].keys())
+                model_df = pd.DataFrame(model_res)
+                model_df['model'] = models[i]
+                model_df = model_df[cols]
+                model_dfs.append(model_df)
+            else:
+                message = f'no result found for model {models[i]}'
+        except Exception:
+            # if show_info:
+            #     st.write(f'error while getting result for {models[i]}')
+            except_msg = traceback.format_exc()
+            message = f'error while getting result for {models[i]}: {except_msg}'
+        if show_info and len(message) > 0:
+            st.info(message)
+        percent_complete += 1 / len(models)
+        if i == len(models) - 1:
+            percent_complete = 1.0
+        time.sleep(0.1)
+        my_bar.progress(percent_complete)
+        model_df = pd.concat(model_dfs, axis=0).sort_values(by=['roundNumber'], ascending=False).reset_index(drop=True)
+        model_df = model_df[model_df['roundNumber'].isin(roundlist)].reset_index(drop=True)
+    return model_df
 
 def chart_pxline(data, x, y, color, hover_data=None, x_range=None):
     fig = px.line(data, x=x, y=y, color=color, hover_data=hover_data)
@@ -437,7 +460,7 @@ def histtrend():
 def model_evaluation():
     models = []
     model_selection = []
-    model_dict = model_data_picker(values=[True, True, True, True, True, True])
+    model_dict = model_data_picker_bak(values=[True, True, True, True, True, True])
     mean_scale = [-0.05, 0.1]
     count_scale = [1, 50]
     sharpe_scale = [-0.2, 3]
@@ -652,31 +675,9 @@ def get_stake_graph(data):
 #     roundlist = [i for i in range(latest_round_id, latest_round_id-4, -1]
 
 
-def check_session_state(key, data, init=False):
+def check_session_state(key):
     # st.write(data)
-    portsel_list = ['portfolio_left', 'portfolio_right']
-    if key in portsel_list:
-        if ('last_opt' not in st.session_state) & (~init):
-            st.session_state['last_opt'] = key
-        if key not in st.session_state:
-            st.session_state[key] = data
-            # st.session_state['last_opt'] = key
-        else:
-            # st.write(key, st.session_state['last_opt'],len(st.session_state[key]))
-            if st.session_state[key] is None:
-                st.session_state[key] = []
-                # st.session_state['last_opt'] = key
-            if data is None:
-                return st.session_state[key]
-            elif (set(data)!=set(st.session_state[key])) & (len(data)>0 & (~init)):
-                # if st.session_state['last_opt'] == key:
-                if(st.session_state['last_opt']==key):
-                    st.session_state[key] = data
-                else:
-                    if len(st.session_state[key]) ==0:
-                        st.session_state[key] = data
-                    st.session_state['last_opt'] = key
-
+    if key in st.session_state:
         return st.session_state[key]
     else:
         return None
@@ -685,7 +686,7 @@ def check_session_state(key, data, init=False):
 def stake_overview():
     models = []
     model_selection = []
-    model_dict = model_data_picker(values=[True, True, True, True, True, True])
+    model_dict = model_data_picker_bak(values=[True, True, True, True, True, True])
     for k in model_dict.keys():
         if model_dict[k] not in models:
             models += model_dict[k]
@@ -748,175 +749,64 @@ def stake_overview():
                     stake_models = ovdf['model'].tolist()
                     liveround_stake_df = get_stake_by_liverounds(stake_models)
                     # st.write(liveround_stake_df)
+
                     round_view(liveround_stake_df,'live_round_stake')
 
 
-def set_portolio_control(ct, models ,data):
-    roundmodels = data['model'].unique().tolist()
-    use_models = [m for m in models if m in roundmodels]
-    ct.write(use_models)
 
+def app_setting():
+    pfm_exp = st.expander('Perormance Data Setting', expanded=True)
+    with pfm_exp:
+        pfm_default_model= st.checkbox('download data for default model', value=True)
 
-# def portfolio_model_selector(models):
-#     st.sidebar.subheader('Portfolio Model Shortlist')
-#     # placeholder = st.sidebar.empty()
-#     text_content = '''
-#                     fast model picker by CSV string.
-#                     example: "model1, model2, model3"
-#                    '''
-#     # port_model_exp = st.sidebar.expander('portfolio model selector', expanded=True)
-#     # with port_model_exp:
-#     # text = placeholder.text_input(label=text_content, key='1')
-#     text = st.sidebar.text_area(label=text_content)
-#     result_models = []
-#     if len(text)>0:
-#         csv_parts = text.split(',')
-#         for s in csv_parts:
-#             m = s.strip()
-#             if m in models:
-#                 result_models.append(m)
-#     default_models = list(dict.fromkeys(result_models))
-#     port_model_selection = st.sidebar.multiselect('select models for portfolio shortlist', models, default=default_models)
-#     # selection_opt = st.sidebar.radio('select models for', list(port_model_selection_opt.keys()), index=0, format_func=lambda x: port_model_selection_opt[x])
-#     return port_model_selection
-
-
-def portfolio_model_selector(models):
-    # placeholder = st.sidebar.empty()
-    selection_opt = st.sidebar.radio('select models for', list(port_model_selection_opt.keys()), index=0, format_func=lambda x: port_model_selection_opt[x], key='pmsel_mulsel')
-
-    text_content = '''
-                    fast model picker by CSV string.
-                    example: "model1, model2, model3" 
-                   '''
-    # port_model_exp = st.sidebar.expander('portfolio model selector', expanded=True)
-    # with port_model_exp:
-    # text = placeholder.text_input(label=text_content, key='1')
-    text = st.sidebar.text_area(label=text_content, key='pmsel_txt')
-    result_models = []
-    if len(text)>0:
-        csv_parts = text.split(',')
-        for s in csv_parts:
-            m = s.strip()
-            if m in models:
-                result_models.append(m)
-    default_models = list(dict.fromkeys(result_models))
-    # st.write(default_models)
-    port_model_selection = st.sidebar.multiselect('select models for portfolio shortlist', models, default=default_models)
-    return port_model_selection, selection_opt
+    stake_exp = st.expander('stake overview data setting', expanded=True)
+    if st.button('confirm settiong'):
+        st.session_state['pfm_default_model'] = pfm_default_model
 
 
 
-def portfolio_mgmt():
-    models = []
-    model_selection = []
-    # model_dict = model_data_picker(values=[True, True, True, True, True, True])
-    model_dict = model_data_picker(values=[True, True, True, True, True, True])
+def performance_overview():
+    select_app = st.sidebar.selectbox("", list(pfm_opt.keys()), index=0, format_func=lambda x: pfm_opt[x])
+    if select_app=='data_op':
+        data_operation()
 
-    for k in model_dict.keys():
-        if model_dict[k] not in models:
-            models += model_dict[k]
-    # overview_models = models
-    port_models_left = check_session_state('portfolio_left', [], init=True)
-    port_models_right = check_session_state('portfolio_right', [], init=True)
-
-    if os.path.isfile(project_config.DASHBOARD_MODEL_RESULT_FILE) and len(models)>0:
-        port_cts = st.columns(2)
-        # port_models_shortlist  = portfolio_model_selector(models)
-
-        # elif port_model_opt=='overview':
-        # if len(port_models_shortlist)==0:
-        #
-        #     port_models_shortlist = models
-        # else:
-        #     return None
-        data = project_utils.load_data(project_config.DASHBOARD_MODEL_RESULT_FILE)
-        round_data = data[data['model'].isin(models)].drop_duplicates(['model', 'roundNumber'],keep='first').reset_index(drop=True)
-        min_round = int(round_data['roundNumber'].min())
-        max_round = int(round_data['roundNumber'].max())
-        suggest_min_round = max_round - 20
-        if min_round == max_round:
-            min_round = max_round - 20
-
-        round_exp = st.expander('Round Selection', expanded=True)
-        metric_exp = st.expander('Metric Selection', expanded=True)
-        # portmodel_select_exp = st.expander('Portfolio Model Selection', expanded=True)
-        models_overview_exp =st.expander('Portfolio Model Shortlist', expanded=True)
-        with round_exp:
-            min_selectround, max_selectround = st.slider('', min_round, max_round,
-                                                         (suggest_min_round, max_round), 1)
-            round_list = [r for r in range(min_selectround, max_selectround+1)]
-        with metric_exp:
-            defaultlist = ['corr_sharpe', 'mmc_sharpe',  'corr2mmc_sharpe','corr_mean', 'mmc_mean', 'corr2mmc_mean', 'count']
-            select_metrics = st.multiselect('', list(model_eval_opt.keys()),
-                                         format_func=lambda x: model_eval_opt[x], default=defaultlist)
-
-            round_data = round_data[round_data['roundNumber'].isin(round_list)].reset_index(drop=True)
-        roundmetric_df = get_roundmetric_data(round_data).sort_values(by='corrmmc_sharpe', ascending=False).reset_index(drop=True)
-        roundmodels = roundmetric_df['model'].unique().tolist()
-
-        # with portmodel_select_exp:
-        #     port_sel = st.columns(2)
-            # pl = port_sel[0].multiselect('', port_models_shortlist, default=[])
-        port_models_selection, port_opt = portfolio_model_selector(roundmodels)
-        if port_opt=='left':
-            port_models_left = check_session_state('portfolio_left',port_models_selection)
-        elif port_opt=='right':
-            port_models_right = check_session_state('portfolio_right',port_models_selection)
-
-            # port_models_right = portfolio_model_selector_ct(port_sel, roundmodels, c=1)
-
-            # port_models_right = portfolio_model_selector_ct(port_sel[1], port_models_shortlist, '2')
-
-
-
-        # with port_exp = st.expander('Portfolio Comparison ')
-        set_portolio_control(port_cts[0], port_models_left, roundmetric_df)
-        set_portolio_control(port_cts[1], port_models_right, roundmetric_df)
-
-        with models_overview_exp:
-            cols = ['model'] + select_metrics
-            st.subheader(f'{len(roundmetric_df)} models are available for portfolio selection')
-            st.dataframe(roundmetric_df[cols], height=max_table_height)
-
-    # default_models = model_fast_picker(models)
-    #     model_selection = st.sidebar.multiselect('select models for chart', models, default=default_models)
-
-
-
-    pass
+    if select_app=='performance_overview':
+        performance_overview()
+    if select_app=='historic_trend':
+        histtrend()
+    if select_app=='model_evaluation':
+        model_evaluation()
 
 
 
 def show_content():
     st.sidebar.header('Dashboard Selection')
-    select_app = st.sidebar.selectbox("", list(app_opt.keys()), index=3, format_func=lambda x: app_opt[x])
+    select_app = st.sidebar.selectbox("", list(app_opt.keys()), index=0, format_func=lambda x: app_opt[x])
     if select_app=='performance_overview':
         performance_overview()
-    if select_app=='historic_trend':
-        histtrend()
-    if select_app=='data_op':
-        data_operation()
-    if select_app=='model_evaluation':
-        model_evaluation()
     if select_app=='stake_overview':
         stake_overview()
-    if select_app=='portfolio_mgmt':
-        portfolio_mgmt()
-
-
+    if select_app=='app_setting':
+        app_setting()
 
 
 # main body
 # various configuration setting
 app_opt = {
            'performance_overview' : 'Performance Overview',
-           'historic_trend':'Historic Trend',
-           'model_evaluation' : 'Model Evaluation',
            'stake_overview': 'Stake Overview',
-           'portfolio_mgmt': 'Portfolio_Management',
-           'data_op':'Data Operation'
+           'app_setting':''
            }
+
+
+pfm_opt = {
+    'data_op': 'Download Score Data',
+    'liveround_view': 'Live Round Overview',
+    'historic_trend': 'Historic Trend',
+    'model_evaluation': 'Model Evaluation',
+}
+
+
 
 tbl_opt = {
             'round_result':'Round Results',
@@ -996,13 +886,14 @@ stakeoverview_plot_opt = {
     'all':'Display all available data'
 }
 
-
-port_model_selection_opt = {
-    'left':'Left Portfolio',
-    'right':'Right Portfolio'
-    # 'overview':'Model Overview'
-}
-
+def show_session_status_info():
+    # 'raw_performance_data'
+    key1 = 'model_data'
+    if check_session_state(key1) is None:
+        st.write(f'{key1} is None')
+    else:
+        st.write(f'{key1} shape is {st.session_state[key1].shape}')
+    pass
 
 
 
@@ -1014,6 +905,19 @@ with height_exp:
     max_table_height = st.slider('Please choose the height for tables', 100, 1000, 500, 50)
 
 st.title('Numerai Dashboard')
+
+# key = 'pfm_default_model'
+# if check_session_state('pfm_default_model') is None:
+#     st.write('set value')
+#     st.session_state['pfm_default_model'] = True
+# else:
+#     st.write('use set value')
+#
+# st.write(st.session_state)
+
+df = get_saved_data()
+show_session_status_info()
+# st.write(f'{key} is {chkval}')
 
 # trying out multi columns
 # col1, col2 = st.columns(2)

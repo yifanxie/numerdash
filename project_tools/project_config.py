@@ -5,7 +5,19 @@ sys.path.append(os.path.dirname(os.getcwd()))
 DATETIME_FORMAT1 = '%Y%m%d%H%M'
 DATETIME_FORMAT2 = '%Y/%m/%d %H:%M'
 DATETIME_FORMAT3 = '%Y-%m-%d'
+SAVE_LOCAL_COPY = True
 
+BENCHMARK_MODELS = ['integration_test', 'integration_test_7'] #'budbot_7'] #'integration_test_7'
+MODEL_ROUND_RESULT_FILE = '../feature_data/model_round_result.pkl'
+MODEL_DAILY_RESULT_FILE = '../feature_data/model_daily_result.pkl'
+
+NUMERATI_URL = 'https://raw.githubusercontent.com/woobe/numerati/master/data.csv'
+NUMERATI_FILE = '../feature_data/numerati_data.pkl'
+FEATURE_PATH = '../feature_data/'
+
+
+
+# to be discarded
 MODEL_NAMES = ['yxbot', 'yxbot2', 'sforest_baihu', 'stree_qinlong', 'flyingbus_mcv6', 'starry_night','fish_and_chips', 'rogue_planet', 'three_body_problem', 'grinning_cat', 'schrodingers_cat', 'omega_weapon', 'ifirit','dark_bahamut', 'wen_score',  'qinlong', 'baihu','marlboro', 'hell_cerberus', 'fuxi', 'roci_fuxi', 'kupo_mcv7', 'yxbot_mcv2', 'yxbot_mcv10']
 
 
@@ -30,14 +42,6 @@ IAAI_MODELS = ['ia_ai',  'the_aijoe4','i_like_the_coin_08', 'i_like_the_coin_09'
 
 RESTRADE_MODELS = ['restrading', 'restrading2', 'restrading3', 'restrading4', 'restrading5', 'restrading6', 'restrading7', 'restrading8', 'restrading9']
 
-
-BENCHMARK_MODELS = ['integration_test', 'i_like_the_coin_01'] #'budbot_7'] #'integration_test_7'
 MCV_MODELS = ['mcv', 'mcv2', 'mcv3', 'mcv4', 'mcv5','mcv6','mcv7','mcv8','mcv9','mcv10','mcv11','mcv12','mcv13']
-
 MCV_NEW_MODELS = ['mcv14', 'mcv15', 'mcv16', 'mcv17', 'mcv18', 'mcv19', 'mcv20', 'mcv21', 'mcv22', 'mcv23', 'mcv24', 'mcv25', 'mcv26', 'mcv27', 'mcv28', 'mcv29', 'mcv30', 'mcv31', 'mcv32', 'mcv33', 'mcv34', 'mcv35', 'mcv36', 'mcv37', 'mcv38', 'mcv39', 'mcv40', 'mcv41', 'mcv42', 'mcv43', 'mcv44', 'mcv45', 'mcv46', 'mcv47', 'mcv48', 'mcv49', 'mcv50']
 
-
-DASHBOARD_MODEL_RESULT_FILE = '../feature_data/dashboard_model_result.pkl'
-NUMERATI_URL = 'https://raw.githubusercontent.com/woobe/numerati/master/data.csv'
-NUMERATI_FILE = '../feature_data/numerati_data.pkl'
-FEATURE_PATH = '../feature_data/'
