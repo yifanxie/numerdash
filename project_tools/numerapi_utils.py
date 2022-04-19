@@ -11,43 +11,44 @@ napi = numerapi.NumerAPI()
 # def get_round
 
 
-def get_model_history(model):
-    res = napi.daily_user_performances(model)
-    res = pd.DataFrame.from_dict(res)
-    res['payoutPending'] = res['payoutPending'].astype(np.float64)
-    res['payoutSettled'] = res['payoutSettled'].astype(np.float64)
-    res['stakeValue'] = res['stakeValue'].astype(np.float64)
-    res['deltaRatio'] = res['payoutPending'] / res['stakeValue']
-    res['realised_pl'] = project_utils.series_reverse_cumsum(res['payoutSettled'])
-    res['floating_pl'] = project_utils.series_reverse_cumsum(res['payoutPending']) - res['realised_pl']
-    res['current_stake'] = res['stakeValue'] - res['floating_pl']
-    rename_dict = {'stakeValue':'floating_stake'}
-    res = res.rename(columns=rename_dict)
-    # res['equity'] = res['stakeValue'] + res['floating_pl']
-    # cols = res.columns.tolist()
-    # res = res[['model'] + cols]
-
-    res['model'] = model
-    cols = ['model', 'date', 'current_stake', 'floating_stake', 'payoutPending', 'floating_pl', 'realised_pl']
-    res = res[cols]
-    return res
+# depreciated
+# def get_model_history(model):
+#     res = napi.daily_user_performances(model)
+#     res = pd.DataFrame.from_dict(res)
+#     res['payoutPending'] = res['payoutPending'].astype(np.float64)
+#     res['payoutSettled'] = res['payoutSettled'].astype(np.float64)
+#     res['stakeValue'] = res['stakeValue'].astype(np.float64)
+#     res['deltaRatio'] = res['payoutPending'] / res['stakeValue']
+#     res['realised_pl'] = project_utils.series_reverse_cumsum(res['payoutSettled'])
+#     res['floating_pl'] = project_utils.series_reverse_cumsum(res['payoutPending']) - res['realised_pl']
+#     res['current_stake'] = res['stakeValue'] - res['floating_pl']
+#     rename_dict = {'stakeValue':'floating_stake'}
+#     res = res.rename(columns=rename_dict)
+#     # res['equity'] = res['stakeValue'] + res['floating_pl']
+#     # cols = res.columns.tolist()
+#     # res = res[['model'] + cols]
+#
+#     res['model'] = model
+#     cols = ['model', 'date', 'current_stake', 'floating_stake', 'payoutPending', 'floating_pl', 'realised_pl']
+#     res = res[cols]
+#     return res
 
 
 def get_portfolio_overview(models, onlylatest=True):
     res_df = []
     for m in models:
-        try:
-            print(f'extracting information for model {m}')
-            if onlylatest:
-                mdf = get_model_history(m).loc[0:0]
-            else:
-                mdf = get_model_history(m)
-            res_df.append(mdf)
-        except:
-            print(f'no information for model {m} is available')
+        # try:
+        print(f'extracting information for model {m}')
+        if onlylatest:
+            mdf = get_model_history_v3(m).loc[0:0]
+        else:
+            mdf = get_model_history_v3(m)
+        res_df.append(mdf)
+        # except:
+        #     print(f'no information for model {m} is available')
     if len(res_df)>0:
         res_df = pd.concat(res_df, axis=0)
-        res_df['date'] = res_df['date'].dt.date
+        # res_df['date'] = res_df['date'].dt.date
         if onlylatest:
             return res_df.sort_values(by='floating_pl', ascending=False).reset_index(drop=True)
         else:
@@ -189,6 +190,9 @@ def daily_submissions_performances_V3(modelname: str) -> List[Dict]:
                         mmcPercentile
                         tc
                         tcPercentile
+                        tcMultiplier
+                        fncV3
+                        fncV3Percentile
                         corrWMetamodel
                         payout
                         roundResolved
@@ -214,8 +218,18 @@ def daily_submissions_performances_V3(modelname: str) -> List[Dict]:
     return performances
 
 
-
-
+def get_lb_models(limit=20000, offset=0):
+    query = """
+           query($limit: Int, $offset: Int){
+               v2Leaderboard(limit:$limit, offset:$offset){
+                   username
+               }           
+           }
+           """
+    arguments = {'limit':limit, 'offset':offset}
+    data = napi.raw_query(query, arguments)['data']['v2Leaderboard']
+    model_list = [i['username'] for i in data]
+    return model_list
 
 
 
@@ -377,7 +391,7 @@ def get_model_history_v3(model):
     res['date'] = pd.to_datetime(res['roundResolveTime']).dt.date
 
     res['realised_pl'] = res['payout_cumsum']
-    latest_realised_pl = res[res['roundResolved'] == True]['payout_cumsum'].max()
+    latest_realised_pl = res[res['roundResolved'] == True]['payout_cumsum'].values[0]
     res.loc[res['roundResolved'] == False, 'realised_pl'] = latest_realised_pl
 
     res['floating_pl'] = 0
