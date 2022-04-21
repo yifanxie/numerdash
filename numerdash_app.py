@@ -335,7 +335,10 @@ def data_operation():
 
         model_df = model_df[ord_cols]
         if project_config.SAVE_LOCAL_COPY:
-            project_utils.pickle_data(project_config.MODEL_ROUND_RESULT_FILE, model_df)
+            try:
+                project_utils.pickle_data(project_config.MODEL_ROUND_RESULT_FILE, model_df)
+            except:
+                pass
         st.session_state['model_data'] = model_df
 
     if show_info:
