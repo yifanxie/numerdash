@@ -737,10 +737,12 @@ def get_latest_round_id():
         all_competitions = numerapi_utils.get_competitions()
         latest_comp_id = all_competitions[0]['number']
     except:
-        print('calling api unsuccessulf, using downloaded data to get the latest round')
-        local_data = load_data(project_config.DASHBOARD_MODEL_RESULT_FILE)
-        latest_comp_id = local_data['roundNumber'].max()
+        print('calling numerai API unsuccessulf')
+        # local_data = load_data(project_config.DASHBOARD_MODEL_RESULT_FILE)
+        # latest_comp_id = local_data['roundNumber'].max()
+        latest_comp_id = 0
     return int(latest_comp_id)
+
 #     except:
 
 latest_round = get_latest_round_id()
