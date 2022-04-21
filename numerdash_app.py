@@ -817,7 +817,7 @@ def performance_overview():
 
 def show_content():
     st.sidebar.header('Dashboard Selection')
-    select_app = st.sidebar.selectbox("", list(app_opt.keys()), index=0, format_func=lambda x: app_opt[x])
+    select_app = st.sidebar.selectbox("", list(app_opt.keys()), index=1, format_func=lambda x: app_opt[x])
     if select_app=='performance_overview':
         performance_overview()
     if select_app=='stake_overview':
@@ -966,12 +966,7 @@ if check_session_state('models') is None:
     with st.spinner('updating model list'):
         st.session_state['models'] = numerapi_utils.get_lb_models()
 
-show_session_status_info()
-# st.write(f'{key} is {chkval}')
-
-# trying out multi columns
-# col1, col2 = st.columns(2)
-# col1.header('col1')
-# col2.header('col2')
+# debug purpose only
+# show_session_status_info()
 
 show_content()
