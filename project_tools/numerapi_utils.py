@@ -252,7 +252,11 @@ def get_round_model_performance(roundNumber: int, model: str):
             """
     arguments = {'roundNumber': roundNumber,'username': model}
     data = napi.raw_query(query, arguments)['data']['roundSubmissionPerformance']
-    latest_performance = data['roundDailyPerformances'][-1] #[-1] ### issue with order
+    
+    if pd.isnull(data['roundDailyPerformances'][0]['payoutPending']):
+        latest_performance = data['roundDailyPerformances'][1] #[-1] ### issue with order
+    else:
+        latest_performance = data['roundDailyPerformances'][0] #[-1] ### issue with order
     res = {}
     res['model'] = model
     res['roundNumber'] = roundNumber

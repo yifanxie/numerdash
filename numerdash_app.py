@@ -604,7 +604,7 @@ def get_stake_type(corr, mmc):
     return res
 
 
-@st.cache(suppress_st_warning=True)
+# @st.cache(suppress_st_warning=True)
 def get_stake_by_liverounds(models):
     latest_round_id = int(project_utils.get_latest_round_id())
     roundlist = [i for i in range(latest_round_id, latest_round_id - 5, -1)]
@@ -785,8 +785,14 @@ def get_roundresolve_history(data):
 
     rename_dict = {'roundNumber': 'Round', 'roundNumber_current_stake_sum': 'Total Stake',
                    'roundNumber_payout_sum': 'Round P/L', 'date': 'Resolved Date'}
+
     res.rename(columns=rename_dict, inplace=True)
+    res['Total Stake'] = np.round(res['Total Stake'].values, 5)
+    res['Round P/L'] = np.round(res['Round P/L'].values, 5)
     st.write(res)
+    resolved_data = res.to_csv(index=False).encode('utf-8')
+    st.download_button('download round results', resolved_data, 'resolved_round_results.csv', 'text/csv', key='download_resolved_round')
+
 
 
 
